@@ -181,7 +181,7 @@ class MosaicGPT(nn.Module):
 
         # Embedding
         if isinstance(module, nn.Embedding):
-            init_fn(module.weight)
+            torch.nn.init.xavier_uniform_(module.weight)
 
         # LayerNorm
         if isinstance(module, nn.LayerNorm):
