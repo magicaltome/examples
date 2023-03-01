@@ -236,11 +236,11 @@ class ComposerMosaicGPT(ComposerModel):
         self.__num_fwd_flops = None
         self.train_metrics = {
             'LanguageCrossEntropy': LanguageCrossEntropy(cfg.vocab_size),
-            'Perplexity': Perplexity(),
+            'PerplexityButAReallyLongNameSoItGoesOffTheScreen': Perplexity(),
         }
         self.eval_metrics = {
             'LanguageCrossEntropy': LanguageCrossEntropy(cfg.vocab_size),
-            'Perplexity': Perplexity(),
+            'PerplexityButAReallyLongNameSoItGoesOffTheScreen': Perplexity(),
         }
 
     def get_targets(self, batch):
