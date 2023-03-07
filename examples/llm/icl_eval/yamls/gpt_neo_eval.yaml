@@ -19,21 +19,12 @@ load_path: # Add your (optional) Composer checkpoint path here!
 
 icl_tasks:
 -
-<<<<<<< Updated upstream
-  label: piqa
-  dataset_uri: # ADD YOUR OWN DATASET URI
-  num_fewshot:
-  - 5
-  batch_size: 16
-  icl_task_type: multiple_choice
-=======
   label: triviaqa
   dataset_uri: s3://mosaicml-internal-dataset-lambda/lambada/triviaqa.jsonl
   num_fewshot:
   - 5
   batch_size: 1
   icl_task_type: question_answering
->>>>>>> Stashed changes
   metric_names:
   - InContextLearningMultipleChoiceAccuracy
   prompt_string: '' # this goes at the beginning of each input
