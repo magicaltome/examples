@@ -77,12 +77,12 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
 
         return composer_model
 
-    def update_metric(self, batch, outputs, metric) -> None:
-        if isinstance(metric, InContextLearningMetric):
-            if batch.get('mode', None) == 'icl_task':
-                # only apply ICL metrics to specially constructed
-                # icl_task batches
-                metric.update(batch, outputs, self.labels)  # type: ignore
-        else:
-            outputs = outputs.view(-1, outputs.size(-1))
-            metric.update(outputs, self.labels.view(-1))  # type: ignore
+    # def update_metric(self, batch, outputs, metric) -> None:
+    #     if isinstance(metric, InContextLearningMetric):
+    #         if batch.get('mode', None) == 'icl_task':
+    #             # only apply ICL metrics to specially constructed
+    #             # icl_task batches
+    #             metric.update(batch, outputs, self.labels)  # type: ignore
+    #     else:
+    #         outputs = outputs.view(-1, outputs.size(-1))
+    #         metric.update(outputs, self.labels.view(-1))  # type: ignore
