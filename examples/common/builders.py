@@ -133,6 +133,7 @@ def build_icl_evaluators(cfg, tokenizer):
                 prompt_string=icl_cfg.prompt_string,
                 example_delimiter=icl_cfg.example_delimiter,
                 continuation_delimiter=icl_cfg.continuation_delimiter,
+                question_prelimiter=icl_cfg.get('question_prelimiter', ''),
                 destination_path=f'{icl_cfg.label}-{num_fewshot}.jsonl',
             )
             logger_keys.extend([f'metrics/{label}/{m}' for m in metric_names])
