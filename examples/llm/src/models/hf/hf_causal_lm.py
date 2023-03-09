@@ -4,7 +4,7 @@
 """Implements a Hugging Causal LM wrapped inside a :class:`.ComposerModel`."""
 
 from composer.metrics.nlp import (InContextLearningMetric, LanguageCrossEntropy,
-                                  Perplexity)
+                                  Perplexity, InContextLearningLMAccuracy, InContextLearningQAAccuracy, InContextLearningMultipleChoiceAccuracy)
 from omegaconf import DictConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
@@ -69,6 +69,7 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
         composer_model = super().__init__(model=model,
                                           tokenizer=tokenizer,
                                           metrics=metrics,
+                                          eval_metrics=[InContextLearningLMAccuracy(), InContextLearningMultipleChoiceAccuracy(), InContextLearningQAAccuracy()],
                                           z_loss=cfg.get('z_loss', 0.0))
 
         # if cfg.add_rouge:
