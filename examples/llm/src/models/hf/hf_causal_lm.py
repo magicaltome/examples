@@ -6,6 +6,7 @@
 from composer.metrics.nlp import (InContextLearningLMAccuracy,
                                   InContextLearningMetric,
                                   InContextLearningMultipleChoiceAccuracy,
+                                  InContextLearningQAAccuracy,
                                   LanguageCrossEntropy, Perplexity)
 from omegaconf import DictConfig
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -50,7 +51,8 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
             LanguageCrossEntropy(len(tokenizer)),
             Perplexity(),
             InContextLearningLMAccuracy(),
-            InContextLearningMultipleChoiceAccuracy()
+            InContextLearningMultipleChoiceAccuracy(),
+            InContextLearningQAAccuracy()
         ]
 
         init_device = cfg.get('init_device', 'cpu')
@@ -93,7 +95,7 @@ class ComposerHFCausalLM(HuggingFaceModelWithZLoss):
                 # icl_task batches
                 metric.update(batch, outputs, self.labels)  # type: ignore
             elif batch.get('mode', None) == 'generate':
-                metric.update(output, self.labels)
+                metric.update(outputs, self.labels)
         else:
             outputs = outputs.view(-1, outputs.size(-1))
             metric.update(outputs, self.labels.view(-1))  # type: ignore
