@@ -6,8 +6,7 @@
 Inspired by https://github.com/karpathy/minGPT/blob/master/mingpt/model.py
 """
 
-import math
-from functools import partial
+import warnings
 from typing import Optional
 
 import torch
@@ -15,13 +14,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from composer.algorithms.low_precision_layernorm.low_precision_layernorm import \
     LPLayerNorm
-from composer.metrics import METRIC_DEFAULT_CTORS, InContextLearningMetric
+from composer.metrics import (InContextLearningLMAccuracy,
+                              InContextLearningMetric,
+                              InContextLearningMultipleChoiceAccuracy)
 from composer.metrics.nlp import LanguageCrossEntropy, Perplexity
 from composer.models.base import ComposerModel
 from omegaconf import DictConfig
 
 import examples.llm.src.models.layers.attention as attention
 import examples.llm.src.models.layers.gpt_blocks as gpt_blocks
+from examples.llm.src.models.param_init_fns import MODEL_INIT_REGISTRY
 
 
 class MosaicGPT(nn.Module):
@@ -39,8 +41,8 @@ class MosaicGPT(nn.Module):
         else:
             raise ValueError(f'Unknown attn_impl={cfg.attn_impl}')
 
-        layernorm_class = nn.LayerNorm if not cfg.get(
-            'low_precision_layernorm', False) else LPLayerNorm
+        layernorm_class = nn.LayerNorm if not cfg.get('low_precision_layernorm',
+                                                      False) else LPLayerNorm
 
         if cfg.get('attn_qk_ln') and cfg.attn_impl not in ['flash', 'triton']:
             raise NotImplementedError(
@@ -51,6 +53,13 @@ class MosaicGPT(nn.Module):
         ]:
             raise NotImplementedError(
                 'QKV clipping only implemented with flash and triton attention.'
+            )
+
+        if cfg.get('softmax_scale') and cfg.attn_impl not in [
+                'flash', 'triton'
+        ]:
+            raise NotImplementedError(
+                'softmax_scale only implemented with flash and triton attention.'
             )
 
         self.alibi = cfg.get('alibi', False)
@@ -103,6 +112,17 @@ class MosaicGPT(nn.Module):
                 'attn_mask', torch.empty(mask_shape, device=cfg.init_device))
         else:
             self.attn_mask = None
+
+        if cfg.get('no_bias', False):
+            for module in self.modules():
+                if hasattr(module, 'bias') and isinstance(
+                        module.bias, nn.Parameter):
+                    if cfg.get('verbose'):
+                        print(f'Removing bias ({module.bias}) from {module}.')
+                    module.register_parameter('bias', None)
+
+        if cfg.get('verbose') and cfg.get('verbose') > 2:
+            print(self)
 
     def _attn_mask(self,
                    batch_size=None,
@@ -176,59 +196,10 @@ class MosaicGPT(nn.Module):
 
     # Param Initialization, needed for device='meta' fast initialization
     def param_init_fn(self, module):
-        init_fn = partial(torch.nn.init.normal_,
-                          mean=0.0,
-                          std=self.cfg.init_std)
-        # Linear
-        if isinstance(module, nn.Linear):
-            init_fn(module.weight)
-            if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
-
-            if getattr(module, '_is_residual', False):
-                module.weight.data.normal_(
-                    mean=0.0,
-                    std=(self.cfg.init_std / math.sqrt(2 * self.cfg.n_layers)))
-
-        # Embedding
-        if isinstance(module, nn.Embedding):
-            init_fn(module.weight)
-
-        # LayerNorm
-        if isinstance(module, nn.LayerNorm):
-            torch.nn.init.zeros_(module.bias)
-            torch.nn.init.ones_(module.weight)
-
-        # torch's MultiheadAttention
-        if isinstance(module, nn.MultiheadAttention):
-            if module._qkv_same_embed_dim:
-                assert module.in_proj_weight is not None
-                assert module.q_proj_weight is None and module.k_proj_weight is None and module.v_proj_weight is None
-                init_fn(module.in_proj_weight)
-            else:
-                assert module.q_proj_weight is not None and module.k_proj_weight is not None and module.v_proj_weight is not None
-                assert module.in_proj_weight is None
-                init_fn(module.q_proj_weight)
-                init_fn(module.k_proj_weight)
-                init_fn(module.v_proj_weight)
-
-            # bias
-            if module.in_proj_bias is not None:
-                torch.nn.init.zeros_(module.in_proj_bias)
-            if module.bias_k is not None:
-                torch.nn.init.zeros_(module.bias_k)
-            if module.bias_v is not None:
-                torch.nn.init.zeros_(module.bias_v)
-
-            # out proj
-            if module.out_proj._is_residual:
-                module.out_proj.weight.data.normal_(
-                    mean=0.0,
-                    std=(self.cfg.init_std / math.sqrt(2 * self.cfg.n_layers)))
-            else:
-                init_fn(module.out_proj.weight)
-            if module.out_proj.bias is not None:
-                torch.nn.init.zeros_(module.out_proj.bias)
+        init_fn_name = self.cfg.get('param_init_fn', 'baseline_')
+        if self.cfg.get('verbose', 0) > 1:
+            warnings.warn(f'Using {init_fn_name} initialization.')
+        MODEL_INIT_REGISTRY[init_fn_name](module, self.cfg)
 
     # FSDP Wrap function
     def fsdp_wrap_fn(self, module):
@@ -250,8 +221,14 @@ class ComposerMosaicGPT(ComposerModel):
             'Perplexity': Perplexity(),
         }
         self.eval_metrics = {
-            'LanguageCrossEntropy': LanguageCrossEntropy(cfg.vocab_size),
-            'Perplexity': Perplexity(),
+            'LanguageCrossEntropy':
+                LanguageCrossEntropy(cfg.vocab_size),
+            'Perplexity':
+                Perplexity(),
+            'InContextLearningMultipleChoiceAccuracy':
+                InContextLearningMultipleChoiceAccuracy(),
+            'InContextLearningLMAccuracy':
+                InContextLearningLMAccuracy()
         }
 
     def get_targets(self, batch):
@@ -290,15 +267,6 @@ class ComposerMosaicGPT(ComposerModel):
             targets = self.get_targets(batch).view(-1)
             metric.update(outputs, targets)
 
-    def add_eval_metrics(self, evaluator):
-        evaluator_metrics = {
-            m: METRIC_DEFAULT_CTORS[m]() for m in evaluator.metric_names
-        }
-        if self.eval_metrics is not None:
-            self.eval_metrics.update(evaluator_metrics)
-        else:
-            self.eval_metrics = evaluator_metrics
-
     def _compute_num_fwd_flops(self):
         n_params = sum(p.numel() for p in self.parameters())
         # the number of paramters is approximately the number of multiply-accumulates (MAC) in the network
@@ -313,6 +281,6 @@ class ComposerMosaicGPT(ComposerModel):
 
     def flops_per_batch(self, batch):
         # Note: this computation does not take into account padding, and assumes
-        # that the dataset has been constructed without padding. Additionally, we 
+        # that the dataset has been constructed without padding. Additionally, we
         # assume the backward pass is approximately 2x the forward pass
         return self.num_fwd_flops * 3 * batch['input_ids'].shape[0]

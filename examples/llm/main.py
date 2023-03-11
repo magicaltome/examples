@@ -86,7 +86,7 @@ def main(cfg):
     )
 
     reproducibility.seed_all(cfg.seed)
-    dist.initialize_dist(get_device(None))
+    dist.initialize_dist(get_device(None), timeout=1500.0)
 
     # Run Name
     if cfg.get('run_name') is None:
@@ -137,8 +137,6 @@ def main(cfg):
     if 'icl_tasks' in cfg:
         tokenizer = TOKENIZER_REGISTRY[cfg.tokenizer.type](**cfg.tokenizer.args)
         icl_evaluators, _ = build_icl_evaluators(cfg, tokenizer)
-        for icl_evaluator in icl_evaluators:
-            model.add_eval_metrics(icl_evaluator)
         evaluators.extend(icl_evaluators)
 
     # Optimizer
@@ -195,6 +193,7 @@ def main(cfg):
         save_overwrite=cfg.get('save_overwrite', False),
         load_path=cfg.get('load_path', None),
         load_weights_only=cfg.get('load_weights_only', False),
+        load_ignore_keys=cfg.get('load_ignore_keys', None),
         autoresume=cfg.get('autoresume', False),
     )
 
