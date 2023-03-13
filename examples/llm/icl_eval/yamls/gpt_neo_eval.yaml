@@ -27,7 +27,7 @@ icl_tasks:
   dataset_uri: s3://mosaicml-internal-dataset-lambda/lambada/triviaqa.jsonl
   num_fewshot:
   - 5
-  batch_size: 16
+  batch_size: 1
   icl_task_type: question_answering
   metric_names:
   - InContextLearningQAAccuracy
