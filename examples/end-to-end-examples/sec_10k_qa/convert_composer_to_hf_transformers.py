@@ -70,7 +70,7 @@ def get_hf_tokenizer_from_composer_state_dict(
 def write_huggingface_pretrained_from_composer_checkpoint(
         checkpoint_path: Union[Path, str],
         output_path: Union[Path, str],
-        output_precision: str = 'fp32',
+        output_precision: str = 'fp16',
         local_checkpoint_save_location: Optional[Union[Path,
                                                        str]] = None) -> None:
     """Convert a Composer checkpoint to a pretrained HF checkpoint folder.
